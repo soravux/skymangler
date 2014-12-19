@@ -273,7 +273,7 @@ def genDataset(folder, n=-1):
     fichiers = os.listdir(folder)
 
     data = []
-    sA = scipy.io.loadmat('data/solidAngles')
+    sA = scipy.io.loadmat('../data/solidAngles')
 
     i = 0
     D = None
@@ -314,12 +314,12 @@ def genDataset(folder, n=-1):
 
 
 
-def train_AE_multiplelayers(hidden_layers = [500, 100, 20], 
-                            epochs=[15, 20, 30], 
-                            dataset="data/20130823",
+def train_AE_multiplelayers(hidden_layers = [3000, 500, 100], 
+                            epochs=[10, 30, 30], 
+                            dataset="../data/20130823",
                             learning_rate=0.1):
     
-    data, D, N = genDataset(epochs)
+    data, D, N = genDataset(dataset)
     index = T.lscalar() 
     x = T.matrix('x')
 
@@ -330,11 +330,14 @@ def train_AE_multiplelayers(hidden_layers = [500, 100, 20],
 
     input_vals = data
 
+    liste_params = []
+
     for hl,ep in zip(hidden_layers, epochs):
+        print 'Begin layer'
         da = dA(
             numpy_rng=rng,
             theano_rng=theano_rng,
-            input=input_vals,
+            input=x,
             n_visible=D,
             n_hidden=hl
             )
@@ -349,9 +352,47 @@ def train_AE_multiplelayers(hidden_layers = [500, 100, 20],
             cost,
             updates=updates,
             givens={
-                x: data[index * batch_size: (index + 1) * batch_size]
+                x: input_vals[index * batch_size: (index + 1) * batch_size]
             }
         )
+
+        start_time = time.time()
+        # go through training epochs
+        for epoch in xrange(ep):
+            # go through trainng set
+            c = []
+            for batch_index in xrange(n_train_batches):
+                c.append(train_da(batch_index))
+
+            print 'Training epoch %d, cost ' % epoch, numpy.mean(c)
+            print 'Time from start : ', time.time()-start_time
+
+        end_time = time.time()
+
+        print 'Time for this layer : ', end_time-start_time
+
+        liste_params.append(da.params)
+        with open('params_op.txt', 'a') as f:
+            f.write(str(da.W.get_value()), str(da.b.get_value()), str(da.bhid.get_value()))
+
+        new_inputs = da.get_hidden_values(input_vals).eval()
+        print(new_inputs.shape)
+
+        # La sortie de cette couche devient l'entree de la prochaine
+        input_vals = theano.shared(numpy.asarray(new_inputs,
+                                        dtype=theano.config.floatX),
+                                        borrow=True)    # Ca fait quoi ce parametre la?
+        #for d in input_vals:
+         #   new_input_vals.append()
+
+        #input_vals = numpy.vstack(new_input_vals)
+        #import pdb
+        #pdb.set_trace()
+        #print(input_vals.shape)
+        D = hl
+
+
+
 
 
 
@@ -377,8 +418,10 @@ def test_dA(learning_rate=0.1, training_epochs=15,
     """
 
     # DEBUT MAG
+    train_AE_multiplelayers()
+    exit()
 
-    data, D, N = genDataset("data/20130823")
+    data, D, N = genDataset("../data/20130823")
     n_train_batches = N // batch_size
     index = T.lscalar() 
     x = T.matrix('x')
