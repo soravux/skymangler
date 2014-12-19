@@ -501,17 +501,17 @@ def train_AE_multiplelayers(params):
         print 'Time for this layer : ', end_time-start_time
 
         liste_params.append(da.params)
-        with open('params_op_'+str(i)+'.txt', 'w') as f:
-            pickle.dump( [(da.W.get_value()), da.b.get_value(), da.b_prime.get_value()], f)
+        with open('params_op_'+str(i)+'.txt', 'wb') as f:
+            pickle.dump( [(da.W.get_value()), da.b.get_value(), da.b_prime.get_value()], f, -1)
 
-        new_inputs = da.get_hidden_values(input_vals)
-        new_inputs_eval = new_inputs.eval()
-        print(new_inputs_eval.shape)
+        new_inputs = da.get_hidden_values(input_vals).eval()
+        #new_inputs_eval = new_inputs
+        #print(new_inputs_eval.shape)
 
         # La sortie de cette couche devient l'entree de la prochaine
-        #input_vals = theano.shared(numpy.asarray(new_inputs,
-        #                                dtype=theano.config.floatX),
-        #                                borrow=True)    # Ca fait quoi ce parametre la?
+        input_vals = theano.shared(numpy.asarray(new_inputs,
+                                        dtype=theano.config.floatX),
+                                        borrow=True)    # Ca fait quoi ce parametre la?
 
         D = hl
         i += 1
