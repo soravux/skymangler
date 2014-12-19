@@ -34,9 +34,14 @@ import os
 import sys
 import time
 
+import array
+import OpenEXR
+import Imath 
+
 import numpy
 import scipy.misc
 import cPickle as pickle
+from glob import glob
 
 import theano
 import theano.tensor as T
@@ -267,6 +272,54 @@ class dA(object):
         return (cost, updates)
 
 
+def genDatasetFromEXR(folder, cropWidth=20):
+    os.chdir(folder)
+    data = []
+    for f in glob('*-img.exr'):
+        f_mask = f.rsplit("-", 1)[0] + "-mask.exr"
+        f_mask_hdl = OpenEXR.InputFile(f_mask)
+        FLOAT = Imath.PixelType(Imath.PixelType.FLOAT)
+        Y = numpy.array(array.array('f', f_mask_hdl.channel("Y", FLOAT)).tolist())
+         
+        f_hdl = OpenEXR.InputFile(f)
+         
+        # Read the three color channels as 32-bit floats
+        FLOAT = Imath.PixelType(Imath.PixelType.FLOAT)
+        (R,G,B) = [array.array('f', f_hdl.channel(Chan, FLOAT)).tolist() for Chan in ("R", "G", "B")]
+        R = numpy.array(R)
+        G = numpy.array(G)
+        B = numpy.array(B)
+
+        dgray = R * 0.25 + G * 0.25 +B * 0.5
+        dgray = dgray/dgray.max()
+        dgray[Y<0.5] = 0
+        dgray = dgray.reshape(256,256)
+        dgray = dgray[cropWidth:-cropWidth, cropWidth:-cropWidth]
+
+        dgray = numpy.ravel(dgray)
+        data.append(dgray)    
+        
+    dataN = numpy.vstack(data).astype(numpy.float32)
+
+    with open('data2.pkl','wb') as f:
+        pickle.dump((dataN, (256-cropWidth*2)**2, len(data)), f, -1)
+
+    dataConvert = theano.shared(numpy.asarray(dataN,
+                                                dtype=theano.config.floatX),
+                                                borrow=True)    # Ca fait quoi ce parametre la?
+    print(dataN.shape)
+    return dataConvert, (256-cropWidth*2)**2, len(data)
+
+
+def genDatasetFromPKL(path):
+    with open(path,'rb') as f:
+        val = pickle.load(f)
+
+    dataConvert = theano.shared(numpy.asarray(val[0],
+                                                dtype=theano.config.floatX),
+                                                borrow=True)    # Ca fait quoi ce parametre la?
+    return dataConvert, val[1], val[2]
+
 
 def genDataset(folder, n=-1):
 
@@ -316,12 +369,12 @@ def genDataset(folder, n=-1):
 
 
 
-def train_AE_multiplelayers(hidden_layers = [2000, 400, 60], 
+def train_AE_multiplelayers(hidden_layers = [1200, 300, 60], 
                             epochs=[25, 25, 30], 
-                            dataset="../data/20130823",
+                            dataset="../data",
                             learning_rate=0.1):
     
-    data, D, N = genDataset(dataset)
+    data, D, N = genDatasetFromPKL("../data/data2.pkl") # genDatasetFromEXR(dataset)
     index = T.lscalar() 
     x = T.matrix('x')
 
