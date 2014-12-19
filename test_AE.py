@@ -516,6 +516,8 @@ def train_AE_multiplelayers(params):
         D = hl
         i += 1
 
+    return
+
     # Fine tuning
     for ep in range(10):    # Nombre d'epochs pour le fine tuning
 
