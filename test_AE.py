@@ -31,15 +31,13 @@
 """
 
 import os
+import os, os.path
 import sys
 import time
 
-import array
-import OpenEXR
-import Imath 
 
 import numpy
-import scipy.misc
+import scipy.misc, scipy.io
 import cPickle as pickle
 from glob import glob
 
@@ -54,6 +52,139 @@ try:
     import PIL.Image as Image
 except ImportError:
     import Image
+
+
+
+class DatasetImporter:
+    """
+    Permet d'importer des datasets de skymaps sous
+    differentes formes.
+    """
+
+    def __init__(self, dataset_type, folder, name, nanbehavior='zeros', cropWidth=0):
+        self.type = dataset_type
+        self.path = folder
+        self.name = name
+        self.crop = cropWidth
+        self.nan = nanbehavior
+        self.D, self.N = None, None
+
+        self.dataRGB = None
+        self.dataGray = None
+        self.dataTheano = None
+
+    def _rgb2gray(self, rgb):
+        # Ponderation un peu arbitraire
+        return rgb[:,:,0] * 0.25 + rgb[:,:,1] * 0.25 + rgb[:,:,2] * 0.5
+
+    def _removeNaNs(self, gray):
+        if self.nan == 'zeros':
+            gray[numpy.isnan(gray)] = 0.
+        elif self.nan == 'filter':
+            gray[~numpy.isnan(gray)] = self.gray[~numpy.isnan(gray)] / gray[~numpy.isnan(gray)].max()
+            gray = gray[~numpy.isnan(gray)]
+        return gray
+
+    def _loadmat(self):
+        fichiers = os.listdir(self.path)
+        for fname in fichiers:
+            if not self.name in fname:
+                continue
+
+            img = scipy.io.loadmat(os.path.join(self.path, fname))['envmap']
+            self.dataRGB.append(img)
+
+            # Conversion 
+            gray = self._rgb2gray(img)
+            # Retrait d'eventuels NaNs
+            gray_noNaNs = self._removeNaNs(gray)
+
+            self.dataGray.append(gray_noNaNs)
+
+            if self.D is None:
+                self.D = len(gray_noNaNs)
+            else:
+                assert self.D == len(gray_noNaNs), "Dimensions size mismatch : {} / {}".format(self.D, len(gray_noNaNs))
+
+        self.N = len(self.dataGray)
+
+        self.dataRGB = dataC
+        self.dataGray = numpy.vstack(self.dataGray).astype(numpy.float32)
+        self.dataTheano = theano.shared(numpy.asarray(self.dataGray, dtype=theano.config.floatX), borrow=True)
+
+        return True
+
+    def _loadpkl(self):
+        with open(path,'rb') as f:
+            val = pickle.load(f)
+
+        self.dataGray = val[0]
+
+        self.dataTheano = theano.shared(numpy.asarray(self.dataGray, dtype=theano.config.floatX), borrow=True)
+
+        return True
+
+
+    def _loadexr(self):
+        import array
+        import OpenEXR
+        import Imath 
+
+        os.chdir(self.path)
+        data = []
+        dataC = []
+
+        for f in glob('*-img.exr'):
+            f_mask = f.rsplit("-", 1)[0] + "-mask.exr"
+            f_mask_hdl = OpenEXR.InputFile(f_mask)
+            FLOAT = Imath.PixelType(Imath.PixelType.FLOAT)
+            Y = numpy.array(array.array('f', f_mask_hdl.channel("Y", FLOAT)).tolist())
+             
+            f_hdl = OpenEXR.InputFile(f)
+             
+            # Read the three color channels as 32-bit floats
+            FLOAT = Imath.PixelType(Imath.PixelType.FLOAT)
+            (R,G,B) = [array.array('f', f_hdl.channel(Chan, FLOAT)).tolist() for Chan in ("R", "G", "B")]
+            R = numpy.array(R)
+            G = numpy.array(G)
+            B = numpy.array(B)
+
+            dataC.append(numpy.dstack([R,G,B]))
+
+            dgray = R * 0.25 + G * 0.25 +B * 0.5
+            dgray = dgray/dgray.max()
+            dgray[Y<0.5] = 0
+            dgray = dgray.reshape(256,256)
+            dgray = dgray[cropWidth:-cropWidth, cropWidth:-cropWidth]
+
+            dgray = numpy.ravel(dgray)
+            data.append(dgray)    
+            
+        dataN = numpy.vstack(data).astype(numpy.float32)
+
+        with open('data2.pkl','wb') as f:
+            pickle.dump((dataN, (256-cropWidth*2)**2, len(data)), f, -1)
+
+        dataConvert = theano.shared(numpy.asarray(dataN,
+                                                    dtype=theano.config.floatX),
+                                                    borrow=True)    # Ca fait quoi ce parametre la?
+        print(dataN.shape)
+        return dataConvert, (256-cropWidth*2)**2, len(data)
+
+
+
+    def load(self):
+        if self.type == 'MAT':
+            return self._loadmat()
+        elif self.type == 'EXR':
+            return self._loadexr()
+        elif self.type == 'PKL':
+            return self._loadpkl()
+        else:
+            print("Format d'image '{}' inconnu!".format(self.type))
+            return False
+
+
 
 
 """
