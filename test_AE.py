@@ -373,7 +373,7 @@ def train_AE_multiplelayers(hidden_layers = [3000, 500, 100],
 
         liste_params.append(da.params)
         with open('params_op.txt', 'a') as f:
-            f.write(str(da.W.get_value()), str(da.b.get_value()), str(da.bhid.get_value()))
+            f.write(str(da.W.get_value()), str(da.b.get_value()), str(da.b_prime.get_value()))
 
         new_inputs = da.get_hidden_values(input_vals).eval()
         print(new_inputs.shape)
