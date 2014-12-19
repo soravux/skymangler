@@ -136,7 +136,8 @@ class DatasetImporter:
         with open(os.path.join(self.path, self.name),'rb') as f:
             val = pickle.load(f)
 
-        self.dataGray = numpy.log(val[0])
+        epsilon = 1e-9
+        self.dataGray = numpy.log(val[0]+epsilon)
         self.dataTheano = theano.shared(numpy.asarray(self.dataGray, dtype=theano.config.floatX), borrow=True)
         self.D, self.N = val[1], val[2]
         return True
