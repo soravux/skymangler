@@ -35,6 +35,8 @@ import sys
 import time
 
 import numpy
+import scipy.misc
+import cPickle as pickle
 
 import theano
 import theano.tensor as T
@@ -314,8 +316,8 @@ def genDataset(folder, n=-1):
 
 
 
-def train_AE_multiplelayers(hidden_layers = [3000, 500, 100], 
-                            epochs=[10, 30, 30], 
+def train_AE_multiplelayers(hidden_layers = [2000, 400, 60], 
+                            epochs=[25, 25, 30], 
                             dataset="../data/20130823",
                             learning_rate=0.1):
     
@@ -331,6 +333,7 @@ def train_AE_multiplelayers(hidden_layers = [3000, 500, 100],
     input_vals = data
 
     liste_params = []
+    i = 0
 
     for hl,ep in zip(hidden_layers, epochs):
         print 'Begin layer'
@@ -372,8 +375,8 @@ def train_AE_multiplelayers(hidden_layers = [3000, 500, 100],
         print 'Time for this layer : ', end_time-start_time
 
         liste_params.append(da.params)
-        with open('params_op.txt', 'a') as f:
-            f.write(str(da.W.get_value()), str(da.b.get_value()), str(da.b_prime.get_value()))
+        with open('params_op_'+str(i)+'.txt', 'w') as f:
+            pickle.dump( [(da.W.get_value()), da.b.get_value(), da.b_prime.get_value()], f)
 
         new_inputs = da.get_hidden_values(input_vals).eval()
         print(new_inputs.shape)
@@ -390,6 +393,7 @@ def train_AE_multiplelayers(hidden_layers = [3000, 500, 100],
         #pdb.set_trace()
         #print(input_vals.shape)
         D = hl
+        i += 1
 
 
 
