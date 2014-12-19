@@ -61,29 +61,42 @@ class DatasetImporter:
     differentes formes.
     """
 
-    def __init__(self, dataset_type, folder, name, nanbehavior='zeros', cropWidth=0):
+    def __init__(self, dataset_type, folder, name, nanbehavior='zeros', cropWidth=0, savepkl=None):
+        """
+        dataset_type = MAT | EXR | PKL
+        """
         self.type = dataset_type
         self.path = folder
         self.name = name
-        self.crop = cropWidth
+        self.cropW = cropWidth
         self.nan = nanbehavior
+        self.savepkl = savepkl
         self.D, self.N = None, None
 
-        self.dataRGB = None
-        self.dataGray = None
+        self.dataRGB = []
+        self.dataGray = []
         self.dataTheano = None
 
     def _rgb2gray(self, rgb):
         # Ponderation un peu arbitraire
-        return rgb[:,:,0] * 0.25 + rgb[:,:,1] * 0.25 + rgb[:,:,2] * 0.5
+        d = rgb[:,:,0] * 0.25 + rgb[:,:,1] * 0.25 + rgb[:,:,2] * 0.5
+        return d/d[~numpy.isnan(d)].max()
 
     def _removeNaNs(self, gray):
         if self.nan == 'zeros':
             gray[numpy.isnan(gray)] = 0.
-        elif self.nan == 'filter':
-            gray[~numpy.isnan(gray)] = self.gray[~numpy.isnan(gray)] / gray[~numpy.isnan(gray)].max()
+        elif self.nan == 'remove':
+            gray[~numpy.isnan(gray)] = gray[~numpy.isnan(gray)] / gray[~numpy.isnan(gray)].max()
             gray = gray[~numpy.isnan(gray)]
         return gray
+
+    def _crop(self, gray):
+        if self.cropW == 0:
+            return gray
+        if len(gray.shape) == 1:
+            c = int(gray.shape[0]**0.5)
+            gray = gray.reshape(c, c)
+        return gray[self.cropW:-self.cropW, self.cropW:-self.cropW]
 
     def _loadmat(self):
         fichiers = os.listdir(self.path)
@@ -99,29 +112,31 @@ class DatasetImporter:
             # Retrait d'eventuels NaNs
             gray_noNaNs = self._removeNaNs(gray)
 
-            self.dataGray.append(gray_noNaNs)
+            gray_crop = self._crop(gray_noNaNs)
+
+            self.dataGray.append(gray_crop)
 
             if self.D is None:
-                self.D = len(gray_noNaNs)
+                self.D = len(gray_crop)
             else:
-                assert self.D == len(gray_noNaNs), "Dimensions size mismatch : {} / {}".format(self.D, len(gray_noNaNs))
+                assert self.D == len(gray_crop), "Dimensions size mismatch : {} / {}".format(self.D, len(gray_crop))
 
         self.N = len(self.dataGray)
 
-        self.dataRGB = dataC
         self.dataGray = numpy.vstack(self.dataGray).astype(numpy.float32)
         self.dataTheano = theano.shared(numpy.asarray(self.dataGray, dtype=theano.config.floatX), borrow=True)
+
+        print(">>>", self.dataGray.shape)
 
         return True
 
     def _loadpkl(self):
-        with open(path,'rb') as f:
+        with open(os.path.join(self.path, self.name),'rb') as f:
             val = pickle.load(f)
 
         self.dataGray = val[0]
-
         self.dataTheano = theano.shared(numpy.asarray(self.dataGray, dtype=theano.config.floatX), borrow=True)
-
+        self.D, self.N = val[1], val[2]
         return True
 
 
@@ -151,26 +166,29 @@ class DatasetImporter:
 
             dataC.append(numpy.dstack([R,G,B]))
 
-            dgray = R * 0.25 + G * 0.25 +B * 0.5
-            dgray = dgray/dgray.max()
-            dgray[Y<0.5] = 0
-            dgray = dgray.reshape(256,256)
-            dgray = dgray[cropWidth:-cropWidth, cropWidth:-cropWidth]
+            gray = numpy.ravel(self._rgb2gray(dataC[-1]))
+            gray[Y<0.5] = 0
+            gray_noNaNs = self._removeNaNs(gray)
+            gray_crop = self._crop(gray_noNaNs)
 
-            dgray = numpy.ravel(dgray)
-            data.append(dgray)    
-            
-        dataN = numpy.vstack(data).astype(numpy.float32)
+            if self.D is None:
+                self.D = len(gray_crop)
+            else:
+                assert self.D == len(gray_crop), "Dimensions size mismatch : {} / {}".format(self.D, len(gray_crop))
 
-        with open('data2.pkl','wb') as f:
-            pickle.dump((dataN, (256-cropWidth*2)**2, len(data)), f, -1)
+            self.dataGray.append(gray_crop)    
+        
+        self.dataGray = numpy.vstack(self.dataGray).astype(numpy.float32)
 
-        dataConvert = theano.shared(numpy.asarray(dataN,
-                                                    dtype=theano.config.floatX),
-                                                    borrow=True)    # Ca fait quoi ce parametre la?
-        print(dataN.shape)
-        return dataConvert, (256-cropWidth*2)**2, len(data)
+        self.N = len(self.dataGray)
 
+        if not self.savepkl is None:
+            with open(self.savepkl,'wb') as f:
+                pickle.dump((self.dataGray, self.D, self.N), f, -1)
+
+        
+        self.dataTheano = theano.shared(numpy.asarray(self.dataGray, dtype=theano.config.floatX), borrow=True)
+        return True
 
 
     def load(self):
@@ -502,10 +520,16 @@ def genDataset(folder, n=-1):
 
 def train_AE_multiplelayers(hidden_layers = [1200, 300, 60], 
                             epochs=[25, 25, 30], 
-                            dataset="../data",
+                            dataset="../data/20130823/",
                             learning_rate=0.1):
+
+    dI = DatasetImporter('MAT', "../data/20130823/", "envmap.exr.mat", nanbehavior='remove')
+    dI = DatasetImporter('EXR', "../data/", "", nanbehavior='zeros', cropWidth=20)
+    dI = DatasetImporter('PKL', "../data", "data2.pkl")
+    dI.load()
+
+    data, D, N = dI.dataTheano, dI.D, dI.N
     
-    data, D, N = genDatasetFromPKL("../data/data2.pkl") # genDatasetFromEXR(dataset)
     index = T.lscalar() 
     x = T.matrix('x')
 
