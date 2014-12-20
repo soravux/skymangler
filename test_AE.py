@@ -103,7 +103,15 @@ class DatasetImporter:
 
     def _patch(self, gray):
         if self.patch:
-            gray[105:110, 41:46] = 0.
+            c = int(gray.shape[0]**0.5)
+            gray = gray.reshape(c, c)
+            gray[39:49, 103:113] = 0.
+            #print(gray[41:47, 105:111])
+            #from matplotlib import pyplot
+            #pyplot.imshow(gray)
+            #pyplot.show()
+        gray = numpy.ravel(gray)
+        #print(gray.shape, self.patch)
         return gray
 
     def _loadmat(self):
@@ -443,7 +451,7 @@ def train_AE_multiplelayers(params):
     dtype, dpath, dname = params.datasettype, params.datasetpath, params.datasetname
     learning_rate = params.lrate
 
-    dI = DatasetImporter(dtype, dpath, dname, nanbehavior=params.nan, cropWidth=params.crop, savepkl=None if params.dumpparsedimgto == "" else params.dumpparsedimgto)
+    dI = DatasetImporter(dtype, dpath, dname, nanbehavior=params.nan, cropWidth=params.crop, savepkl=None if params.dumpparsedimgto == "" else params.dumpparsedimgto, patchHidden=True)
 
 
     #dI = DatasetImporter('MAT', "../data/20130823/", "envmap.exr.mat", nanbehavior='remove')
