@@ -405,7 +405,7 @@ class dA(object):
             # note : we sum over the size of a datapoint; if we are using
             #        minibatches, L will be a vector, with one entry per
             #        example in minibatch
-            L = 0.5 * T.sum( (z - self.x)**2, axis=1)
+            L = 0.5 * T.sum( T.log(T.abs_(z - self.x) + 0.1) , axis=1)
             #L = - T.sum(self.x * T.log(z) + (1 - self.x) * T.log(1 - z), axis=1)
             # note : L is now a vector, where each element is the
             #        cross-entropy cost of the reconstruction of the
