@@ -63,7 +63,7 @@ class DatasetImporter:
     differentes formes.
     """
 
-    def __init__(self, dataset_type, folder, name, nanbehavior='zeros', cropWidth=0, savepkl=None):
+    def __init__(self, dataset_type, folder, name, nanbehavior='zeros', cropWidth=0, savepkl=None, patchHidden=False):
         """
         dataset_type = MAT | EXR | PKL
         """
@@ -74,6 +74,7 @@ class DatasetImporter:
         self.nan = nanbehavior
         self.savepkl = savepkl
         self.D, self.N = None, None
+        self.patch = patchHidden
 
         self.dataRGB = []
         self.dataGray = []
@@ -99,6 +100,11 @@ class DatasetImporter:
             c = int(gray.shape[0]**0.5)
             gray = gray.reshape(c, c)
         return gray[self.cropW:-self.cropW, self.cropW:-self.cropW]
+
+    def _patch(self, gray):
+        if self.patch:
+            gray[105:110, 41:46] = 0.
+        return gray
 
     def _loadmat(self):
         fichiers = os.listdir(self.path)
@@ -137,7 +143,7 @@ class DatasetImporter:
             val = pickle.load(f)
 
         #epsilon = 1e-9
-        self.dataGray = val[0]
+        self.dataGray = [self._patch(v) for v in val[0]]
         self.dataTheano = theano.shared(numpy.asarray(self.dataGray, dtype=theano.config.floatX), borrow=True)
         self.D, self.N = val[1], val[2]
         return True
@@ -405,7 +411,7 @@ class dA(object):
             # note : we sum over the size of a datapoint; if we are using
             #        minibatches, L will be a vector, with one entry per
             #        example in minibatch
-            L = 0.5 * T.sum( T.log(T.abs_(z - self.x) + 0.1) , axis=1)
+            L = 0.5 * T.sum( T.abs_(z - self.x) , axis=1)
             #L = - T.sum(self.x * T.log(z) + (1 - self.x) * T.log(1 - z), axis=1)
             # note : L is now a vector, where each element is the
             #        cross-entropy cost of the reconstruction of the
