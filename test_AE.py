@@ -405,7 +405,7 @@ class dA(object):
             # note : we sum over the size of a datapoint; if we are using
             #        minibatches, L will be a vector, with one entry per
             #        example in minibatch
-            L = 0.5 * T.sum( (z - self.x)**2 )
+            L = 0.5 * T.sum( (z - self.x)**2, axis=1)
             #L = - T.sum(self.x * T.log(z) + (1 - self.x) * T.log(1 - z), axis=1)
             # note : L is now a vector, where each element is the
             #        cross-entropy cost of the reconstruction of the
@@ -503,7 +503,7 @@ def train_AE_multiplelayers(params):
         print 'Time for this layer : ', end_time-start_time
 
         liste_params.append(da.params)
-        with open('params_op_'+str(i)+'.txt', 'wb') as f:
+        with open('params_op_'+str(i)+'.pkl', 'wb') as f:
             pickle.dump( [(da.W.get_value()), da.b.get_value(), da.b_prime.get_value()], f, -1)
 
         new_inputs = da.get_hidden_values(input_vals).eval()
