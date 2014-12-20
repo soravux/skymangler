@@ -103,14 +103,19 @@ class DatasetImporter:
 
     def _patch(self, gray):
         if self.patch:
-            c = int(gray.shape[0]**0.5)
-            gray = gray.reshape(c, c)
-            gray[39:49, 103:113] = 0.
+            #c = int(gray.shape[0]**0.5)
+            #gray = gray.reshape(c, c)
+            gray_sorted = numpy.sort(gray)
+            thresh = gray_sorted[int(0.975 * len(gray))]
+            #print("!!!!", thresh, len(gray[gray>thresh]))
+            gray[gray>thresh] = thresh
+            gray = gray/gray[~numpy.isnan(gray)].max()
+            #gray[39:49, 103:113] = 0.
             #print(gray[41:47, 105:111])
             #from matplotlib import pyplot
             #pyplot.imshow(gray)
             #pyplot.show()
-        gray = numpy.ravel(gray)
+        #gray = numpy.ravel(gray)
         #print(gray.shape, self.patch)
         return gray
 
@@ -419,8 +424,8 @@ class dA(object):
             # note : we sum over the size of a datapoint; if we are using
             #        minibatches, L will be a vector, with one entry per
             #        example in minibatch
-            L = 0.5 * T.sum( T.abs_(z - self.x) , axis=1)
-            #L = - T.sum(self.x * T.log(z) + (1 - self.x) * T.log(1 - z), axis=1)
+            #L = 0.5 * T.sum( T.abs_(z - self.x) , axis=1)
+            L = - T.sum(self.x * T.log(z) + (1 - self.x) * T.log(1 - z), axis=1)
             # note : L is now a vector, where each element is the
             #        cross-entropy cost of the reconstruction of the
             #        corresponding example of the minibatch. We need to
