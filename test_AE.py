@@ -77,7 +77,7 @@ class DatasetImporter:
         self.dataTheano = None
 
         if listContainer != "":
-            self.listFiles = [l.strip() for l in open(os.path.join(folder, listFiles)).readlines() if not l[0]=="#"]
+            self.listFiles = [l.strip() for l in open(os.path.join(folder, listContainer)).readlines() if not l[0]=="#"]
         else:
             self.listFiles = os.listdir(folder)
 
