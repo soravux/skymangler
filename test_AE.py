@@ -313,12 +313,14 @@ class dA(object):
         W=None,
         bhid=None,
         bvis=None,
-        noisetype="gaussian"
+        noisetype="gaussian",
+        distfunc="log"
     ):
         
         self.n_visible = n_visible
         self.n_hidden = n_hidden
         self.noisetype = noisetype
+        self.distfunc = distfunc
 
         # create a Theano random generator that gives symbolic random values
         if not theano_rng:
@@ -434,7 +436,12 @@ class dA(object):
         #        minibatches, L will be a vector, with one entry per
         #        example in minibatch
         #L = 0.5 * T.sum( T.abs_(z - self.x) , axis=1)
-        L = - T.sum(self.x * T.log(z) + (1 - self.x) * T.log(1 - z), axis=1)
+        if self.distfunc == "log":
+            L = - T.sum(self.x * T.log(z) + (1 - self.x) * T.log(1 - z), axis=1)
+        elif self.distfunc == "eucli":
+            L = 0.5 * T.sum( (z - self.x)**2 , axis=1)
+        elif self.distfunc == "abs":
+            L = T.sum( T.abs_(z - self.x) , axis=1)
         # note : L is now a vector, where each element is the
         #        cross-entropy cost of the reconstruction of the
         #        corresponding example of the minibatch. We need to
@@ -593,6 +600,7 @@ if __name__ == '__main__':
     parser.add_argument("--crop", type=int, default=0, help="Nombre de pixels a retirer de chaque cote")
     parser.add_argument("--batchsize", type=int, default=10, help="Taille des mini-batch")
     parser.add_argument("--noisetype", type=str, default="binomial", help="Type de bruit (gaussian | binomial)")
+    parser.add_argument("--disttype", type=str, default="log", help="Fonction de distance a utiliser (log | abs | eucli)")
     parser.add_argument("--dumpparsedimgto", type=str, default="", help="Fichier dans lequel faire un dump des images traitees")
     parser.add_argument("--outputprefix", type=str, default="", help="Prefixe des fichiers de sortie")
     args = parser.parse_args()
