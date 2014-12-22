@@ -34,7 +34,7 @@ import os
 import os, os.path
 import sys
 import time
-
+import random
 
 import numpy
 import scipy.misc, scipy.io
@@ -85,6 +85,7 @@ class DatasetImporter:
         else:
             self.listFiles = os.listdir(folder)
 
+        random.seed(888)        # Pour que notre shuffle soit constant
         random.shuffle(self.listFiles)
         self.listFiles = self.listFiles[:int(pctUse * len(self.listFiles))]
 
