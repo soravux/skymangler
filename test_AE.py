@@ -63,7 +63,7 @@ class DatasetImporter:
     differentes formes.
     """
 
-    def __init__(self, dataset_type, folder, name, nanbehavior='zeros', cropWidth=0, savepkl=None, patchHidden=False):
+    def __init__(self, dataset_type, folder, name, listContainer="", pctUse=1.0, nanbehavior='zeros', cropWidth=0, savepkl=None, patchHidden=False):
         """
         dataset_type = MAT | EXR | PKL
         """
@@ -79,6 +79,15 @@ class DatasetImporter:
         self.dataRGB = []
         self.dataGray = []
         self.dataTheano = None
+
+        if listContainer != "":
+            self.listFiles = [l.strip() for l in open(os.path.join(folder, listFiles)).readlines() if not l[0]=="#"]
+        else:
+            self.listFiles = os.listdir(folder)
+
+        random.shuffle(self.listFiles)
+        self.listFiles = self.listFiles[:int(pctUse * len(self.listFiles))]
+
 
     def _rgb2gray(self, rgb):
         # Ponderation un peu arbitraire
@@ -120,8 +129,7 @@ class DatasetImporter:
         return gray
 
     def _loadmat(self):
-        fichiers = os.listdir(self.path)
-        for fname in fichiers:
+        for fname in self.listFiles:
             if not self.name in fname:
                 continue
 
@@ -146,8 +154,6 @@ class DatasetImporter:
 
         self.dataGray = numpy.vstack(self.dataGray).astype(numpy.float32)
         self.dataTheano = theano.shared(numpy.asarray(self.dataGray, dtype=theano.config.floatX), borrow=True)
-
-        print(">>>", self.dataGray.shape)
 
         return True
 
@@ -308,11 +314,13 @@ class dA(object):
         n_hidden=500,
         W=None,
         bhid=None,
-        bvis=None
+        bvis=None,
+        noisetype="gaussian"
     ):
         
         self.n_visible = n_visible
         self.n_hidden = n_hidden
+        self.noisetype = noisetype
 
         # create a Theano random generator that gives symbolic random values
         if not theano_rng:
@@ -398,8 +406,12 @@ class dA(object):
                 correctly as it only support float32 for now.
 
         """
-
-        return self.theano_rng.normal(size=input.shape, avg=1., std=corruption_level,
+        if self.noisetype == 'binomial':
+            return self.theano_rng.binomial(size=input.shape, n=1,
+                                        p=1 - corruption_level,
+                                        dtype=theano.config.floatX) * input
+        else:
+            return self.theano_rng.normal(size=input.shape, avg=1., std=corruption_level,
                                         dtype=theano.config.floatX) * input
 
     def get_hidden_values(self, input):
@@ -413,27 +425,24 @@ class dA(object):
         """
         return T.nnet.sigmoid(T.dot(hidden, self.W_prime) + self.b_prime)
 
-    def get_cost_updates(self, corruption_level, learning_rate, costInit=None):
+    def get_cost_updates(self, corruption_level, learning_rate):
         """ This function computes the cost and the updates for one trainng
         step of the dA """
 
-        if costInit is None:
-            tilde_x = self.get_corrupted_input(self.x, corruption_level)
-            y = self.get_hidden_values(tilde_x)
-            z = self.get_reconstructed_input(y)
-            # note : we sum over the size of a datapoint; if we are using
-            #        minibatches, L will be a vector, with one entry per
-            #        example in minibatch
-            #L = 0.5 * T.sum( T.abs_(z - self.x) , axis=1)
-            L = - T.sum(self.x * T.log(z) + (1 - self.x) * T.log(1 - z), axis=1)
-            # note : L is now a vector, where each element is the
-            #        cross-entropy cost of the reconstruction of the
-            #        corresponding example of the minibatch. We need to
-            #        compute the average of all these to get the cost of
-            #        the minibatch
-            cost = T.mean(L)
-        else:
-            cost = T.mean(costInit)
+        tilde_x = self.get_corrupted_input(self.x, corruption_level)
+        y = self.get_hidden_values(tilde_x)
+        z = self.get_reconstructed_input(y)
+        # note : we sum over the size of a datapoint; if we are using
+        #        minibatches, L will be a vector, with one entry per
+        #        example in minibatch
+        #L = 0.5 * T.sum( T.abs_(z - self.x) , axis=1)
+        L = - T.sum(self.x * T.log(z) + (1 - self.x) * T.log(1 - z), axis=1)
+        # note : L is now a vector, where each element is the
+        #        cross-entropy cost of the reconstruction of the
+        #        corresponding example of the minibatch. We need to
+        #        compute the average of all these to get the cost of
+        #        the minibatch
+        cost = T.mean(L)
 
         # compute the gradients of the cost of the `dA` with respect
         # to its parameters
@@ -453,15 +462,15 @@ class dA(object):
 def train_AE_multiplelayers(params):
     hidden_layers = params.hiddensize
     epoch_max = params.epochs
-    dtype, dpath, dname = params.datasettype, params.datasetpath, params.datasetname
+    dtype, dpath, dname, dlist = params.datasettype, params.datasetpath, params.datasetname, params.datasetlist
     learning_rate = params.lrate
 
-    dI = DatasetImporter(dtype, dpath, dname, nanbehavior=params.nan, cropWidth=params.crop, savepkl=None if params.dumpparsedimgto == "" else params.dumpparsedimgto, patchHidden=True)
-
-
-    #dI = DatasetImporter('MAT', "../data/20130823/", "envmap.exr.mat", nanbehavior='remove')
-    #dI = DatasetImporter('EXR', "../data/", "", nanbehavior='zeros', cropWidth=20)
-    #dI = DatasetImporter('PKL', "../data", "data2.pkl")
+    dI = DatasetImporter(dtype, dpath, dname, dlist, 
+                            pctUse=params.datasetpcttrain, 
+                            nanbehavior=params.nan, 
+                            cropWidth=params.crop, 
+                            savepkl=None if params.dumpparsedimgto == "" else params.dumpparsedimgto, 
+                            patchHidden=False)
     dI.load()
 
     data, D, N = dI.dataTheano, dI.D, dI.N
@@ -469,7 +478,7 @@ def train_AE_multiplelayers(params):
     index = T.lscalar() 
     x = T.matrix('x')
 
-    batch_size = 20
+    batch_size = params.batchsize
     n_train_batches = N // batch_size
     rng = numpy.random.RandomState(123)
     theano_rng = RandomStreams(rng.randint(2 ** 30))
@@ -488,13 +497,14 @@ def train_AE_multiplelayers(params):
             theano_rng=theano_rng,
             input=x,
             n_visible=D,
-            n_hidden=hl
+            n_hidden=hl,
+            noisetype=params.noisetype
             )
         liste_ae.append(da)
 
         cost, updates, grads = da.get_cost_updates(
-            corruption_level=0.3,
-            learning_rate=learning_rate
+            corruption_level=params.bruit,
+            learning_rate=params.lrate
             )
 
         train_da = theano.function(
@@ -575,12 +585,16 @@ if __name__ == '__main__':
     parser.add_argument('hiddensize', type=int, nargs='+', help="Taille des couches cachees")
     parser.add_argument("--datasetpath", type=str, help="Dossier contenant le dataset (path)")
     parser.add_argument("--datasetname", type=str, default="", help="Nom du fichier (ou pattern)")
+    parser.add_argument("--datasetlist", type=str, default="", help="Chemin vers un fichier contenant les fichiers a utiliser")
     parser.add_argument("--datasettype", type=str, default="MAT", help="MAT | EXR | PKL")
+    parser.add_argument("--datasetpcttrain", type=float, default=0.8, help="Pourcentage des samples a utiliser pour l'entrainement")
     parser.add_argument("--epochs", type=int, default=15, help="Nombre d'epoques pour chaque couche")
-    parser.add_argument("--bruit", type=float, default=0.2, help="Bruit ajoute (std.var. de la gaussienne)")
+    parser.add_argument("--bruit", type=float, default=0.2, help="Bruit ajoute (std.var. de la gaussienne ou q de la binomiale)")
     parser.add_argument("--lrate", type=float, default=0.1, help="Learning rate")
     parser.add_argument("--nan", type=str, default="zeros", help="zeros | remove")
     parser.add_argument("--crop", type=int, default=0, help="Nombre de pixels a retirer de chaque cote")
+    parser.add_argument("--batchsize", type=int, default=10, help="Taille des mini-batch")
+    parser.add_argument("--noisetype", type=str, default="binomial", help="Type de bruit (gaussian | binomial)")
     parser.add_argument("--dumpparsedimgto", type=str, default="", help="Fichier dans lequel faire un dump des images traitees")
     args = parser.parse_args()
 
