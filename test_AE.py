@@ -126,6 +126,7 @@ class DatasetImporter:
         return gray
 
     def _loadmat(self):
+        print("Prepare to load {} files".format(len(self.listFiles)))
         for fname in self.listFiles:
             if not self.name in fname:
                 continue
@@ -529,7 +530,7 @@ def train_AE_multiplelayers(params):
         print 'Time for this layer : ', end_time-start_time
 
         liste_params.append(da.params)
-        with open('params_op_'+str(i)+'.pkl', 'wb') as f:
+        with open(params.outputprefix+'_params_op_'+str(i)+'.pkl', 'wb') as f:
             pickle.dump( [(da.W.get_value()), da.b.get_value(), da.b_prime.get_value()], f, -1)
 
         new_inputs = da.get_hidden_values(input_vals).eval()
@@ -593,6 +594,7 @@ if __name__ == '__main__':
     parser.add_argument("--batchsize", type=int, default=10, help="Taille des mini-batch")
     parser.add_argument("--noisetype", type=str, default="binomial", help="Type de bruit (gaussian | binomial)")
     parser.add_argument("--dumpparsedimgto", type=str, default="", help="Fichier dans lequel faire un dump des images traitees")
+    parser.add_argument("--outputprefix", type=str, default="", help="Prefixe des fichiers de sortie")
     args = parser.parse_args()
 
     train_AE_multiplelayers(args)
