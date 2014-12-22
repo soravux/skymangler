@@ -18,5 +18,5 @@ listeCmds = ['python test_AE.py 5000 500 50 --outputprefix=t1 --lrate=0.1 --brui
                 ] 
 
 if __name__ == '__main__':
-    i = sys.argv[1]
-    os.system(listeCmds[i])
+    i = int(sys.argv[1])
+    os.system(listeCmds[i]-1)
